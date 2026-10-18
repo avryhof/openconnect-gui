@@ -1,7 +1,7 @@
 {
   "name": "openconnect-gui",
-  "version": "1.0.0",
-  "description": "OpenConnect VPN GUI application for macOS",
+  "version": "1.2.0",
+  "description": "OpenConnect VPN GUI application for macOS and Linux",
   "main": "main.js",
   "scripts": {
     "postinstall": "node scripts/create-tray-icon.js",
@@ -12,6 +12,8 @@
     "electron:build": "vite build && electron-builder",
     "start": "npm run electron:dev",
     "package": "npm run build && electron-builder",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:mac": "npm run build && electron-builder --mac",
     "test:expect": "bash test/vpn-connect.test.sh"
   },
   "keywords": [
@@ -20,7 +22,10 @@
     "electron",
     "macos"
   ],
-  "author": "Manish Jadhav",
+  "author": {
+    "name": "Manish Jadhav",
+    "email": "jadedmanish@gmail.com"
+  },
   "license": "MIT",
   "dependencies": {
     "@radix-ui/react-label": "^2.0.2",
@@ -52,6 +57,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "preload-pages.js",
       "dist/pages/**/*",
       "dist/assets/**/*",
       "assets/**/*",
@@ -78,6 +84,17 @@
       "category": "public.app-category.utilities",
       "target": "dmg",
       "icon": "build/icon.icns"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network",
+      "maintainer": "Manish Jadhav <jadedmanish@gmail.com>",
+      "icon": "assets/icons",
+      "synopsis": "OpenConnect VPN client GUI",
+      "description": "Desktop GUI for connecting to VPNs with the OpenConnect command line client."
     }
   }
 }

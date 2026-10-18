@@ -2,23 +2,33 @@
 
 set timeout 30
 set openconnect_path [lindex $argv 0]
-set sudo_password [lindex $argv 1]
-set username [lindex $argv 2]
-set vpn_password [lindex $argv 3]
-set args [lrange $argv 4 end]
+set username [lindex $argv 1]
+set args [lrange $argv 2 end]
+
+# Credentials arrive on stdin, never via argv: argv is world-readable by every
+# local user through ps / /proc/<pid>/cmdline, while this process's stdin is
+# private to us. Line 1 = sudo password, line 2 = VPN password.
+set sudo_password [gets stdin]
+set vpn_password [gets stdin]
 
 log_user 1
 
 # Start sudo openconnect. {*} passes each list element as one argument, as is.
 # Never wrap this in eval: that re-parses the values as Tcl, so a space in a
 # form field adds openconnect options (run as root) and brackets run commands.
+#
+# -k invalidates sudo's cached credentials so sudo ALWAYS prompts for the
+# password here. Without it, a cached sudo login means the first "Password:"
+# prompt expect sees belongs to the VPN server, and the sudo password would be
+# sent to the server instead of the VPN password.
 puts "\[EXPECT\] Starting sudo openconnect..."
-spawn sudo -S $openconnect_path {*}$args
+spawn sudo -k -S $openconnect_path {*}$args
 
 # Send sudo password
+# Match both macOS ("Password:") and Linux ("[sudo] password for user:") prompts.
 puts "\[EXPECT\] Waiting for sudo password prompt..."
 expect {
-    "Password:" {
+    -re {[Pp]assword( for [^:]*)?:} {
         puts "\[EXPECT\] Sudo password prompt detected, sending password..."
         send -- "$sudo_password\r"
         exp_continue
@@ -39,7 +49,7 @@ expect {
         exit 1
     }
     timeout {
-        puts "\[EXPECT ERROR\] Timeout waiting for sudo password prompt"
+        puts "\[EXPECT ERROR\] Timeout waiting for sudo password prompt (does sudo require a password for openconnect? NOPASSWD sudoers rules are not supported)"
         exit 1
     }
 }

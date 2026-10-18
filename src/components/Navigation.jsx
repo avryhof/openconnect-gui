@@ -1,4 +1,4 @@
-import { Network, ScrollText, Activity, ListChecks } from 'lucide-react';
+import { Network, ScrollText, Activity, ListChecks, Settings } from 'lucide-react';
 import { Badge } from './ui/badge';
 
 function Navigation({ currentView, onViewChange, problematicRoutesCount, runningProcessesCount }) {
@@ -7,6 +7,7 @@ function Navigation({ currentView, onViewChange, problematicRoutesCount, running
     { id: 'logs', label: 'Logs', icon: ScrollText },
     { id: 'diagnostics', label: 'Diagnostics', icon: Activity, badge: problematicRoutesCount },
     { id: 'processes', label: 'Processes', icon: ListChecks, badge: runningProcessesCount },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   return (

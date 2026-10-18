@@ -11,14 +11,14 @@ function Splash() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const { ipcRenderer } = window.require('electron');
+    const bridge = window.pageBridge;
 
     // Listen for system check updates
-    ipcRenderer.on('system-check-start', (event, checkName) => {
+    bridge.on('system-check-start', (checkName) => {
       setChecks(prev => [...prev, { name: checkName, status: 'checking', message: '' }]);
     });
 
-    ipcRenderer.on('system-check-complete', (event, checkName, success, message) => {
+    bridge.on('system-check-complete', (checkName, success, message) => {
       setChecks(prev =>
         prev.map(check =>
           check.name === checkName
@@ -28,7 +28,7 @@ function Splash() {
       );
     });
 
-    ipcRenderer.on('system-check-warning', (event, checkName, message) => {
+    bridge.on('system-check-warning', (checkName, message) => {
       setChecks(prev =>
         prev.map(check =>
           check.name === checkName
@@ -38,44 +38,42 @@ function Splash() {
       );
     });
 
-    ipcRenderer.on('splash-progress', (event, percent, message) => {
+    bridge.on('splash-progress', (percent, message) => {
       setProgress(percent);
       if (message) {
         setStatusText(message);
       }
     });
 
-    ipcRenderer.on('splash-error', (event, errorData) => {
+    bridge.on('splash-error', (errorData) => {
       setStatusText('Setup Required');
       setError(errorData);
     });
 
-    ipcRenderer.on('splash-complete', () => {
+    bridge.on('splash-complete', () => {
       setStatusText('System checks completed successfully!');
       setProgress(100);
     });
 
     // Notify main process that splash is loaded
-    ipcRenderer.send('splash-loaded');
+    bridge.send('splash-loaded');
 
     return () => {
-      ipcRenderer.removeAllListeners('system-check-start');
-      ipcRenderer.removeAllListeners('system-check-complete');
-      ipcRenderer.removeAllListeners('system-check-warning');
-      ipcRenderer.removeAllListeners('splash-progress');
-      ipcRenderer.removeAllListeners('splash-error');
-      ipcRenderer.removeAllListeners('splash-complete');
+      bridge.removeAllListeners('system-check-start');
+      bridge.removeAllListeners('system-check-complete');
+      bridge.removeAllListeners('system-check-warning');
+      bridge.removeAllListeners('splash-progress');
+      bridge.removeAllListeners('splash-error');
+      bridge.removeAllListeners('splash-complete');
     };
   }, []);
 
   const handleInstallClick = () => {
-    const { ipcRenderer } = window.require('electron');
-    ipcRenderer.send('open-installer');
+    window.pageBridge.send('open-installer');
   };
 
   const handleLoginClick = () => {
-    const { ipcRenderer } = window.require('electron');
-    ipcRenderer.send('splash-ready');
+    window.pageBridge.send('splash-ready');
   };
 
   const getIconForStatus = (status) => {
@@ -101,7 +99,7 @@ function Splash() {
             <Shield className="h-12 w-12" />
           </div>
           <h1 className="text-4xl font-bold">OpenConnect VPN</h1>
-          <Badge variant="outline">Version 1.0.0</Badge>
+          <Badge variant="outline">Version 1.2.0</Badge>
         </div>
 
         <Separator />

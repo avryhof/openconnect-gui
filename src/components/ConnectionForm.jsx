@@ -15,7 +15,8 @@ function ConnectionForm({
   addLog,
   saveProfiles,
   loadProfiles,
-  onServerChange
+  onServerChange,
+  passwordEncryption = false
 }) {
   const [formData, setFormData] = useState({
     profileName: '',
@@ -24,7 +25,9 @@ function ConnectionForm({
     password: '',
     authgroup: '',
     protocol: 'anyconnect',
-    serverCert: ''
+    serverCert: '',
+    autoConnect: false,
+    promptForPassword: false
   });
   const [selectedProfile, setSelectedProfile] = useState('__new__');
 
@@ -50,7 +53,9 @@ function ConnectionForm({
         password: '',
         authgroup: '',
         protocol: 'anyconnect',
-        serverCert: ''
+        serverCert: '',
+        autoConnect: false,
+        promptForPassword: false
       });
       setSelectedProfile('__new__');
       if (onServerChange) {
@@ -68,7 +73,9 @@ function ConnectionForm({
         password: profile.password,
         authgroup: profile.authgroup || '',
         protocol: profile.protocol || 'anyconnect',
-        serverCert: profile.serverCert || ''
+        serverCert: profile.serverCert || '',
+        autoConnect: !!profile.autoConnect,
+        promptForPassword: !!profile.promptForPassword
       });
       if (onServerChange) {
         onServerChange(profile.server);
@@ -77,7 +84,8 @@ function ConnectionForm({
   };
 
   const handleConnect = async () => {
-    if (!formData.serverUrl || !formData.username || !formData.password) {
+    if (!formData.serverUrl || !formData.username ||
+        (!formData.promptForPassword && !formData.password)) {
       showAlert('Please fill in all required fields', 'error');
       return;
     }
@@ -85,9 +93,11 @@ function ConnectionForm({
     addLog('Attempting to connect...', 'info');
 
     const config = {
+      name: formData.profileName.trim() || undefined,
       server: formData.serverUrl.trim(),
       username: formData.username.trim(),
       password: formData.password.trim(),
+      promptForPassword: formData.promptForPassword,
       authgroup: formData.authgroup?.trim() || undefined,
       protocol: formData.protocol || 'anyconnect',
       serverCert: formData.serverCert?.trim() || undefined
@@ -127,23 +137,29 @@ function ConnectionForm({
       name: formData.profileName,
       server: formData.serverUrl,
       username: formData.username,
-      password: formData.password,
+      // Never store the password for profiles that prompt on connect
+      password: formData.promptForPassword ? '' : formData.password,
+      promptForPassword: !!formData.promptForPassword,
       authgroup: formData.authgroup || '',
       protocol: formData.protocol || 'anyconnect',
-      serverCert: formData.serverCert || ''
+      serverCert: formData.serverCert || '',
+      autoConnect: !!formData.autoConnect
     };
 
-    const existingIndex = profiles.findIndex(p => p.name === formData.profileName);
-    let newProfiles;
+    // Only one profile can auto-connect: clear the flag on all others
+    let newProfiles = profiles.map(p =>
+      p.name === formData.profileName || !formData.autoConnect ? p : { ...p, autoConnect: false }
+    );
+
+    const existingIndex = newProfiles.findIndex(p => p.name === formData.profileName);
 
     if (existingIndex >= 0) {
       // Update existing
-      newProfiles = [...profiles];
       newProfiles[existingIndex] = profile;
       showAlert(`Profile "${formData.profileName}" updated`, 'success');
     } else {
       // Add new
-      newProfiles = [...profiles, profile];
+      newProfiles = [...newProfiles, profile];
       showAlert(`Profile "${formData.profileName}" saved`, 'success');
     }
 
@@ -169,7 +185,9 @@ function ConnectionForm({
         password: '',
         authgroup: '',
         protocol: 'anyconnect',
-        serverCert: ''
+        serverCert: '',
+        autoConnect: false,
+        promptForPassword: false
       });
 
       showAlert(`Profile "${selectedProfile}" deleted`, 'success');
@@ -260,17 +278,46 @@ function ConnectionForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password">Password *</Label>
+            <Label htmlFor="password">Password {!formData.promptForPassword && '*'}</Label>
             <Input
               type="password"
               id="password"
               name="password"
-              placeholder="password"
-              required
+              placeholder={formData.promptForPassword ? 'Not stored — entered on each connect' : 'password'}
+              required={!formData.promptForPassword}
+              disabled={formData.promptForPassword}
               value={formData.password}
               onChange={handleInputChange}
             />
-            <p className="text-xs text-muted-foreground">⚠️ Warning: Password is stored in plaintext locally</p>
+            {!formData.promptForPassword && (
+              passwordEncryption ? (
+                <p className="text-xs text-muted-foreground">
+                  Stored encrypted at rest via your system keyring (libsecret/KWallet).
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  ⚠️ Warning: no system keyring available — password is stored unencrypted locally
+                </p>
+              )
+            )}
+            <div className="flex items-start gap-3 pt-1">
+              <input
+                type="checkbox"
+                id="promptForPassword"
+                checked={formData.promptForPassword}
+                onChange={(e) => setFormData(prev => ({ ...prev, promptForPassword: e.target.checked }))}
+                className="mt-1 h-4 w-4 accent-primary cursor-pointer"
+              />
+              <div className="space-y-0.5">
+                <Label htmlFor="promptForPassword" className="cursor-pointer">
+                  Prompt for password on connect
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Ask each time you connect instead of storing it. Use this when your
+                  password contains a one-time MFA code that changes every time.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -315,6 +362,22 @@ function ConnectionForm({
               onChange={handleInputChange}
             />
             <p className="text-xs text-muted-foreground">Example: pin-sha256:AAAA1111BBB2222CCC3333DDD4444EEE5555FFF6666=</p>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              id="autoConnect"
+              checked={formData.autoConnect}
+              onChange={(e) => setFormData(prev => ({ ...prev, autoConnect: e.target.checked }))}
+              className="mt-1 h-4 w-4 accent-primary cursor-pointer"
+            />
+            <div className="space-y-0.5">
+              <Label htmlFor="autoConnect" className="cursor-pointer">Auto-connect at startup</Label>
+              <p className="text-xs text-muted-foreground">
+                Connect automatically when the app starts (save the profile first). Only one profile can do this.
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">

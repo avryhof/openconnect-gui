@@ -47,8 +47,11 @@ run_case() {
   local out="$tmp/$name"
   local log="$out.log"
 
-  PATH="$tmp/bin:$PATH" FAKE_OUT="$out" FAKE_SUDO_CACHED="$cached" \
-    expect "$script" "$oc" "$sudo_pw" "$vpn_user" "$vpn_pw" "$@" > "$log" 2>&1 &
+  # Credentials are fed on stdin (the script must not take them from argv:
+  # argv is world-readable in the process list).
+  printf '%s\n%s\n' "$sudo_pw" "$vpn_pw" | \
+    PATH="$tmp/bin:$PATH" FAKE_OUT="$out" FAKE_SUDO_CACHED="$cached" \
+    expect "$script" "$oc" "$vpn_user" "$@" > "$log" 2>&1 &
   local pid=$!
   # Stop a hung run after 20 seconds. Polls instead of one long sleep, so no
   # stray sleep outlives the case and holds a piped test run open.
@@ -60,7 +63,10 @@ run_case() {
   kill "$pid" 2>/dev/null
   wait "$pid" 2>/dev/null
 
-  local expected=(-S "$oc" "$@")
+  # sudo is invoked with -k -S: -k forces a sudo password prompt even when a
+  # sudo login is cached, so the first "Password:" prompt is always sudo's and
+  # never the VPN server's.
+  local expected=(-k -S "$oc" "$@")
   local got=()
   if [ -f "$out.argv" ]; then
     while IFS= read -r -d '' a; do got+=("$a"); done < "$out.argv"

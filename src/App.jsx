@@ -5,6 +5,7 @@ import DiagnosticsPanel from './components/DiagnosticsPanel';
 import ProcessMonitor from './components/ProcessMonitor';
 import BasicLogs from './components/BasicLogs';
 import Navigation from './components/Navigation';
+import SettingsPanel from './components/SettingsPanel';
 import Alert from './components/Alert';
 import { Badge } from './components/ui/badge';
 
@@ -19,6 +20,13 @@ function App() {
   const [currentView, setCurrentView] = useState('connection');
   const [problematicRoutesCount, setProblematicRoutesCount] = useState(0);
   const [runningProcessesCount, setRunningProcessesCount] = useState(0);
+  const [settings, setSettings] = useState({
+    minimizeToTray: true,
+    startHiddenToTray: false,
+    startWithSystem: false,
+    trayNoticeShown: false,
+    passwordEncryption: false
+  });
 
   useEffect(() => {
     // Initialize the app
@@ -28,12 +36,21 @@ function App() {
       setOpenConnectInstalled(installed);
 
       if (!installed) {
-        showAlert('OpenConnect is not installed. Please install it first (brew install openconnect)', 'error');
-        addLog('OpenConnect not found. Install with: brew install openconnect', 'error');
+        const installHint = window.electronAPI?.platform === 'linux'
+          ? 'sudo apt install openconnect vpnc-scripts'
+          : 'brew install openconnect';
+        showAlert(`OpenConnect is not installed. Please install it first (${installHint})`, 'error');
+        addLog(`OpenConnect not found. Install with: ${installHint}`, 'error');
       }
 
       // Load saved profiles
       await loadProfiles();
+
+      // Load app settings
+      const appSettings = await window.electronAPI.getSettings();
+      if (appSettings) {
+        setSettings(appSettings);
+      }
 
       // Get initial status
       const status = await window.electronAPI.getStatus();
@@ -126,10 +143,12 @@ function App() {
     }
   }, [currentStatus]);
 
+  const isMac = window.electronAPI?.platform === 'darwin';
+
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Title bar spacer for macOS traffic lights */}
-      <div className="h-10 flex-shrink-0" style={{ WebkitAppRegion: 'drag' }} />
+      {isMac && <div className="h-10 flex-shrink-0" style={{ WebkitAppRegion: 'drag' }} />}
 
       {/* Header */}
       <header className="px-6 pb-3 flex items-center justify-between flex-shrink-0">
@@ -172,6 +191,7 @@ function App() {
                 saveProfiles={saveProfiles}
                 loadProfiles={loadProfiles}
                 onServerChange={setCurrentServerUrl}
+                passwordEncryption={settings.passwordEncryption}
               />
               <BasicLogs
                 logs={logs}
@@ -204,6 +224,17 @@ function App() {
             <ProcessMonitor onProcessCountChange={setRunningProcessesCount} />
           </div>
         )}
+
+        {currentView === 'settings' && (
+          <div className="px-6 py-6">
+            <SettingsPanel
+              settings={settings}
+              onSettingsChange={setSettings}
+              showAlert={showAlert}
+              addLog={addLog}
+            />
+          </div>
+        )}
       </div>
 
       {/* Alert Box */}
@@ -212,7 +243,7 @@ function App() {
       {/* Footer */}
       <footer className="flex-shrink-0 px-6 py-2 border-t bg-muted/30">
         <div className="flex justify-end">
-          <span className="text-xs text-muted-foreground">v1.0.0</span>
+          <span className="text-xs text-muted-foreground">v1.2.0</span>
         </div>
       </footer>
     </div>

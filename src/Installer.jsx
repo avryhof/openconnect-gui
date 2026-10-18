@@ -9,7 +9,11 @@ function Installer() {
   const [installBtnText, setInstallBtnText] = useState('Install OpenConnect Automatically');
   const [installBtnDisabled, setInstallBtnDisabled] = useState(false);
 
-  const { ipcRenderer } = window.require('electron');
+  const bridge = window.pageBridge;
+  const isLinux = bridge.platform === 'linux';
+  const installCommand = isLinux
+    ? 'sudo apt install openconnect vpnc-scripts expect'
+    : 'brew install openconnect';
 
   const copyCode = (text, button) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -24,10 +28,10 @@ function Installer() {
   const installOpenConnect = async () => {
     setInstallBtnDisabled(true);
     setInstallBtnText('Installing...');
-    setStatus({ show: true, message: 'Installing OpenConnect via Homebrew. This may take a few minutes...', type: 'info' });
+    setStatus({ show: true, message: `Installing OpenConnect via ${isLinux ? 'apt' : 'Homebrew'}. This may take a few minutes...`, type: 'info' });
 
     try {
-      const result = await ipcRenderer.invoke('install-openconnect');
+      const result = await bridge.invoke('install-openconnect');
 
       if (result.success) {
         setStatus({
@@ -37,7 +41,7 @@ function Installer() {
         });
         setInstallBtnText('Installed Successfully');
         setTimeout(() => {
-          ipcRenderer.send('openconnect-installed');
+          bridge.send('openconnect-installed');
         }, 2000);
       } else {
         setStatus({
@@ -60,13 +64,13 @@ function Installer() {
   };
 
   const openTerminal = () => {
-    ipcRenderer.send('open-terminal');
+    bridge.send('open-terminal');
   };
 
   const checkAgain = async () => {
     setStatus({ show: true, message: 'Checking for OpenConnect...', type: 'info' });
 
-    const result = await ipcRenderer.invoke('check-openconnect');
+    const result = await bridge.invoke('check-openconnect');
 
     if (result.installed) {
       setStatus({
@@ -75,7 +79,7 @@ function Installer() {
         type: 'success'
       });
       setTimeout(() => {
-        ipcRenderer.send('openconnect-installed');
+        bridge.send('openconnect-installed');
       }, 1500);
     } else {
       setStatus({
@@ -109,6 +113,39 @@ function Installer() {
         </Card>
 
         <div className="space-y-6">
+          {isLinux ? (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex gap-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-foreground font-bold">
+                    1
+                  </div>
+                  <div className="flex-1 space-y-3">
+                    <h3 className="text-lg font-semibold">Install OpenConnect</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Run this command in a terminal (Ubuntu/Debian):
+                    </p>
+                    <div className="relative rounded-md border bg-muted p-3 font-mono text-sm">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="absolute right-2 top-2"
+                        onClick={(e) => copyCode(installCommand, e.target)}
+                      >
+                        <Copy className="mr-2 h-3 w-3" />
+                        Copy
+                      </Button>
+                      <code className="pr-20">{installCommand}</code>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Or click the button below to run the installer automatically:
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
           <Card>
             <CardContent className="pt-6">
               <div className="flex gap-4">
@@ -160,12 +197,12 @@ function Installer() {
                       variant="outline"
                       size="sm"
                       className="absolute right-2 top-2"
-                      onClick={(e) => copyCode('brew install openconnect', e.target)}
+                      onClick={(e) => copyCode(installCommand, e.target)}
                     >
                       <Copy className="mr-2 h-3 w-3" />
                       Copy
                     </Button>
-                    <code>brew install openconnect</code>
+                    <code>{installCommand}</code>
                   </div>
                   <p className="text-sm text-muted-foreground">
                     Or click the button below to run the installer automatically:
@@ -174,12 +211,14 @@ function Installer() {
               </div>
             </CardContent>
           </Card>
+            </>
+          )}
 
           <Card>
             <CardContent className="pt-6">
               <div className="flex gap-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-foreground font-bold">
-                  3
+                  {isLinux ? 2 : 3}
                 </div>
                 <div className="flex-1 space-y-3">
                   <h3 className="text-lg font-semibold">Restart the Application</h3>

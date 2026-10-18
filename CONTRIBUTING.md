@@ -11,7 +11,7 @@ Issues labelled [`good first issue`](https://github.com/jadedm/openconnect-gui/i
 
 ## Set up
 
-You need macOS, Node.js 22 (the exact version is in `.nvmrc`), npm, and OpenConnect (`brew install openconnect`). `expect` ships with macOS.
+You need macOS or Linux, Node.js 22 (the exact version is in `.nvmrc`), npm, and OpenConnect. On macOS install it with `brew install openconnect` (`expect` ships with macOS). On Ubuntu/Debian install it with `sudo apt install openconnect vpnc-scripts expect`.
 
 ```bash
 git clone https://github.com/jadedm/openconnect-gui.git
@@ -31,6 +31,10 @@ npm run build && npx electron-builder --mac dmg --x64  # Intel, from any Mac
 
 `npm run package` builds for the architecture of the Mac it runs on. The Intel command needs `npm run build` first, because `electron-builder` on its own packages whatever is already in `dist/`.
 
+## Build the Linux packages
+
+On Ubuntu/Debian, `npm run dist:linux` (or `npm run package`) writes an AppImage and a `.deb` to `dist/`. The `.deb` build needs `dpkg-deb` and `fakeroot`; building or running the AppImage may need `libfuse2` on newer Ubuntu releases.
+
 The app icon is `build/icon.icns`, which `.gitignore` currently excludes, so a fresh clone builds without it ([#29](https://github.com/jadedm/openconnect-gui/issues/29)). The build config sets no signing identity, so the DMG is signed only if your keychain has a Developer ID certificate that `electron-builder` finds on its own.
 
 Some behaviour differs between `npm start` and the packaged app, because packaged code loads `dist/pages/` and finds `vpn-connect.exp` under `process.resourcesPath`. Test anything touching startup, paths or the connection script in a packaged build too.
@@ -38,12 +42,12 @@ Some behaviour differs between `npm start` and the packaged app, because package
 ## How the app is put together
 
 - `main.js` is the Electron main process: windows, the menu bar icon, startup checks, and every IPC handler (connect, disconnect, profiles, routes, processes, installer).
-- `preload.js` is the bridge for the main window. A new IPC handler needs an entry here before the main window can call it. The splash, installer and password windows call `ipcRenderer` directly for now ([#12](https://github.com/jadedm/openconnect-gui/issues/12)).
+- `preload.js` is the bridge for the main window. A new IPC handler needs an entry here before the main window can call it. The splash, installer and password-prompt windows use `preload-pages.js`, which exposes an allow-listed bridge (`window.pageBridge`); a new handler for one of those windows needs an entry there too.
 - `src/` is the React UI. `pages/` holds four HTML entry points (main window, splash, installer helper, sudo password prompt), each mounting one component from `src/`.
 
 ### How a connection works
 
-`main.js` builds the `openconnect` arguments from the form and asks for the sudo password in its own window (`pages/password-prompt.html`). It then runs `vpn-connect.exp`, an `expect` script that starts `sudo -S openconnect` in a pseudo-terminal and answers the sudo, username and password prompts in order.
+`main.js` builds the `openconnect` arguments from the form and asks for the sudo password in its own window (`pages/password-prompt.html`). It then runs `vpn-connect.exp`, an `expect` script that starts `sudo -k -S openconnect` in a pseudo-terminal and answers the sudo, username and password prompts in order. The sudo and VPN passwords are written to the script's standard input, never passed as command-line arguments.
 
 The status badge turns Connected when OpenConnect's own output says `CONNECTED`, `Established` or `Configured as`. The script also prints `[EXPECT]` and `[EXPECT ERROR]` lines; they reach the Logs tab, but `main.js` looks for the error lines on the wrong stream, so the alert after a failure depends only on the exit code ([#9](https://github.com/jadedm/openconnect-gui/issues/9)).
 

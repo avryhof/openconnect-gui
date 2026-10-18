@@ -3,6 +3,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
+  // Host platform (e.g. 'darwin', 'linux', 'win32')
+  platform: process.platform,
+
   // VPN connection methods
   connectVPN: (config) => ipcRenderer.invoke('connect-vpn', config),
   disconnectVPN: () => ipcRenderer.invoke('disconnect-vpn'),
@@ -12,6 +15,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Profile management methods
   saveProfiles: (profiles) => ipcRenderer.invoke('save-profiles', profiles),
   loadProfiles: () => ipcRenderer.invoke('load-profiles'),
+
+  // App settings (tray behavior, autostart)
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
 
   // Process management
   checkRunningProcesses: () => ipcRenderer.invoke('check-running-processes'),
