@@ -25,6 +25,9 @@ function App() {
     startHiddenToTray: false,
     startWithSystem: false,
     trayNoticeShown: false,
+    theme: 'system',
+    allowCustomOpenConnect: false,
+    customOpenConnectPath: '',
     passwordEncryption: false
   });
 
@@ -179,7 +182,13 @@ function App() {
       {/* Main Content */}
       <div className="flex-1 overflow-auto">
         {currentView === 'connection' && (
-          <div className="px-6 py-6">
+          <div
+            className="px-6 py-6"
+            role="tabpanel"
+            id="panel-connection"
+            aria-labelledby="tab-connection"
+            tabIndex={0}
+          >
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <ConnectionForm
                 profiles={profiles}
@@ -202,13 +211,25 @@ function App() {
         )}
 
         {currentView === 'logs' && (
-          <div className="px-6 py-6">
+          <div
+            className="px-6 py-6"
+            role="tabpanel"
+            id="panel-logs"
+            aria-labelledby="tab-logs"
+            tabIndex={0}
+          >
             <LogsPanel logs={logs} clearLogs={clearLogs} />
           </div>
         )}
 
         {currentView === 'diagnostics' && (
-          <div className="px-6 py-6">
+          <div
+            className="px-6 py-6"
+            role="tabpanel"
+            id="panel-diagnostics"
+            aria-labelledby="tab-diagnostics"
+            tabIndex={0}
+          >
             <DiagnosticsPanel
               showAlert={showAlert}
               addLog={addLog}
@@ -220,13 +241,25 @@ function App() {
         )}
 
         {currentView === 'processes' && (
-          <div className="px-6 py-6">
+          <div
+            className="px-6 py-6"
+            role="tabpanel"
+            id="panel-processes"
+            aria-labelledby="tab-processes"
+            tabIndex={0}
+          >
             <ProcessMonitor onProcessCountChange={setRunningProcessesCount} />
           </div>
         )}
 
         {currentView === 'settings' && (
-          <div className="px-6 py-6">
+          <div
+            className="px-6 py-6"
+            role="tabpanel"
+            id="panel-settings"
+            aria-labelledby="tab-settings"
+            tabIndex={0}
+          >
             <SettingsPanel
               settings={settings}
               onSettingsChange={setSettings}
@@ -243,7 +276,7 @@ function App() {
       {/* Footer */}
       <footer className="flex-shrink-0 px-6 py-2 border-t bg-muted/30">
         <div className="flex justify-end">
-          <span className="text-xs text-muted-foreground">v1.2.0</span>
+          <span className="text-xs text-muted-foreground">v1.3.1</span>
         </div>
       </footer>
     </div>

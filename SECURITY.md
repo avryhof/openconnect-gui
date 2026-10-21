@@ -21,10 +21,18 @@ The app runs `openconnect` under `sudo`, so it handles two secrets: your adminis
 ## Protections in place
 
 - The main window runs with context isolation and reaches the main process only through the functions in `preload.js`. The splash, installer helper and password-prompt windows run the same way, through the allow-listed channels in `preload-pages.js`, with Node.js access disabled.
+- Every window denies new windows (`setWindowOpenHandler`) and only allows navigation to the app's own pages; no other origin can be loaded or redirected to.
+- Every page carries a restrictive Content Security Policy (no remote scripts, no `object-src`, locked `base-uri` and `form-action`).
 - The connection script takes the sudo password and VPN password on standard input, never as command-line arguments, so they do not appear in the process list. It starts with `sudo -k -S`, which forces a fresh sudo prompt so the first `Password:` answer always goes to sudo and never to the VPN server.
+- Binaries and scripts executed **as root** (openconnect, vpnc-script) are only accepted from trusted system directories (`/usr/bin`, `/usr/local/bin`, `/opt/homebrew/bin`, `/snap/bin`, and the standard vpnc-script locations). A user-writable path is refused before the connect starts. Running a custom binary takes two deliberate opt-ins: the advanced setting plus a warning dialog with a confirmation checkbox.
+- The password-prompt result channel is sender-validated: only the live prompt window can answer it, so another window cannot spoof a password into the connect, kill or route flow.
 - Connection fields and credentials are never interpreted as code or options on the way to openconnect: each field arrives as one argument, changed only by trimming surrounding spaces and adding `https://` to a bare server name. `npm run test:expect` checks this against hostile values.
 - Process IDs must be numeric, and route destinations must be `default` or four dot-separated numbers with an optional prefix length, before they reach `sudo`.
 - Most system commands run through `spawn()` with argument arrays. Four use `exec()` with a shell string: the process list, the routing table, the interface list and the OpenConnect installer launcher. The installer string includes the app's install path; none of them include anything you type.
+
+## Accepted exceptions
+
+- **Linux GPU.** Earlier builds disabled GPU acceleration and the GPU sandbox (`--disable-gpu-sandbox`, `--in-process-gpu`) to work around rendering crashes on some Linux GPU/driver combinations. Those switches are now removed, restoring Chromium's GPU sandbox. If a specific machine cannot start the GPU process, run the app with `--disable-gpu` on the command line as a local workaround rather than changing the app defaults.
 
 ## Fixed weaknesses
 

@@ -25,6 +25,7 @@ Running OpenConnect processes, with a Kill button that asks for your sudo passwo
 - Runs in the background: closing the window hides it in the tray instead of quitting, and it can start hidden at login. Both are toggles in the Settings tab.
 - Can autoconnect to a profile marked "Auto-connect" when it starts.
 - Can ask for the VPN password at connect time instead of storing it, for servers that need a one-time code ([#5](https://github.com/jadedm/openconnect-gui/issues/5)-style MFA).
+- Has a light and dark theme, and can follow your desktop's appearance automatically.
 
 ## Install
 
@@ -87,6 +88,12 @@ Profiles live in `profiles.json` in the app's folder under `~/Library/Applicatio
 
 Two ways to keep a password out of the file entirely: leave the password field empty before saving, or tick "Ask for password on connect", which prompts each time you connect (also useful for servers that want a fresh one-time code).
 
+### Settings
+
+The Settings tab holds the theme (Follow system, Light or Dark), the tray behavior, and autostart.
+
+It also has an advanced option to run a **custom OpenConnect binary**. By default the app only runs OpenConnect from your system packages (`/usr/bin`, `/usr/local/bin`, `/opt/homebrew/bin`, `/snap/bin`). If you need a build of your own — for example one patched for Okta — you can point the app at it. Because that binary runs as root, turning it on takes two steps: type the path and click Enable, then tick a checkbox in a warning dialog confirming you trust the file. Both must be done before it applies, and the app refuses any binary or `vpnc-script` in a writable location.
+
 ### Diagnostics
 
 Opening the Diagnostics tab lists network interfaces (`ifconfig`), reads the routing table (`netstat -rn`), and, if the Connection form has a server URL, tests whether that server is reachable (`nc -zv`).
@@ -144,11 +151,11 @@ Your administrator (sudo) password is asked each time, never written to disk, an
 - Username and password only. No 2FA prompts yet ([#5](https://github.com/jadedm/openconnect-gui/issues/5)) and no [certificate login](https://github.com/jadedm/openconnect-gui/discussions/15).
 - Reconnect is limited to what OpenConnect does itself: it retries a dropped connection for 60 seconds. After that you reconnect by hand ([idea](https://github.com/jadedm/openconnect-gui/discussions/17)).
 - [One connection at a time](https://github.com/jadedm/openconnect-gui/discussions/26).
-- Light theme only; a dark mode that follows the system theme is the next planned feature.
+- Light and dark themes, with a setting to follow the system appearance.
 
 ## Roadmap and ideas
 
-The next planned feature is a dark mode that follows the system theme. Planned work is in [issues labelled `enhancement`](https://github.com/jadedm/openconnect-gui/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement). Ideas that are not planned yet live in [Discussions: Ideas](https://github.com/jadedm/openconnect-gui/discussions/categories/ideas); upvote the ones you want or start a new one.
+Planned work is in [issues labelled `enhancement`](https://github.com/jadedm/openconnect-gui/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement). Ideas that are not planned yet live in [Discussions: Ideas](https://github.com/jadedm/openconnect-gui/discussions/categories/ideas); upvote the ones you want or start a new one.
 
 ## Contributing
 

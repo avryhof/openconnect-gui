@@ -2,7 +2,11 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
 import { Settings } from 'lucide-react';
+import CustomBinaryWarning from './CustomBinaryWarning';
 
 function Toggle({ id, checked, onChange, label, description, disabled = false }) {
   return (
@@ -27,6 +31,9 @@ function Toggle({ id, checked, onChange, label, description, disabled = false })
 
 function SettingsPanel({ settings, onSettingsChange, showAlert, addLog }) {
   const [saving, setSaving] = useState(false);
+  const [customPath, setCustomPath] = useState(settings.customOpenConnectPath || '');
+  const [pendingPath, setPendingPath] = useState(null);
+  const [pathError, setPathError] = useState('');
   const isLinux = window.electronAPI?.platform === 'linux';
 
   const updateSetting = async (key, value) => {
@@ -45,6 +52,48 @@ function SettingsPanel({ settings, onSettingsChange, showAlert, addLog }) {
     addLog(`Setting "${key}" set to ${value}`, 'info');
   };
 
+  const enableCustomBinary = async () => {
+    const candidate = customPath.trim();
+    setPathError('');
+    if (!candidate) {
+      setPathError('Enter the full path to an OpenConnect binary first');
+      return;
+    }
+    const check = await window.electronAPI.validateOpenConnectPath(candidate);
+    if (!check.valid) {
+      setPathError(`That path cannot be used (${check.reason}). Provide an executable file.`);
+      return;
+    }
+    // Open the double opt-in warning; only confirm enables the setting.
+    setPendingPath(check.path);
+  };
+
+  const confirmCustomBinary = async (validatedPath) => {
+    setPendingPath(null);
+    setSaving(true);
+    const result = await window.electronAPI.saveSettings({
+      allowCustomOpenConnect: true,
+      customOpenConnectPath: validatedPath
+    });
+    setSaving(false);
+    if (!result.success) {
+      showAlert(`Failed to save setting: ${result.error}`, 'error');
+      return;
+    }
+    if (onSettingsChange) {
+      onSettingsChange(result.settings);
+    }
+    addLog('Custom OpenConnect binary enabled (runs as root)', 'warning');
+    showAlert('Custom OpenConnect binary enabled. It will run as root.', 'error');
+  };
+
+  const disableCustomBinary = async () => {
+    setPathError('');
+    await updateSetting('allowCustomOpenConnect', false);
+    await updateSetting('customOpenConnectPath', '');
+    setCustomPath('');
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -54,6 +103,28 @@ function SettingsPanel({ settings, onSettingsChange, showAlert, addLog }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="theme">Theme</Label>
+          <Select
+            value={settings.theme || 'system'}
+            onValueChange={(value) => updateSetting('theme', value)}
+          >
+            <SelectTrigger id="theme" className="w-[220px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="system">Follow system</SelectItem>
+              <SelectItem value="light">Light</SelectItem>
+              <SelectItem value="dark">Dark</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Follow system uses your desktop's light/dark setting and changes with it.
+          </p>
+        </div>
+
+        <Separator />
+
         <Toggle
           id="minimizeToTray"
           checked={settings.minimizeToTray}
@@ -83,6 +154,51 @@ function SettingsPanel({ settings, onSettingsChange, showAlert, addLog }) {
           description="Start automatically when you log in, hidden in the tray (Linux: adds an entry to ~/.config/autostart/)."
         />
 
+        <Separator />
+
+        <div className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold">Advanced: custom OpenConnect binary</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              By default the app runs OpenConnect from your system packages. Point it at a
+              custom build (for example one with Okta support) only if you trust it — it runs
+              as root.
+            </p>
+          </div>
+
+          {settings.allowCustomOpenConnect && settings.customOpenConnectPath ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                <span className="text-sm text-destructive font-medium">Active custom binary:</span>
+                <code className="text-xs break-all">{settings.customOpenConnectPath}</code>
+              </div>
+              <Button variant="outline" onClick={disableCustomBinary} disabled={saving}>
+                Disable and use system binary
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="customOpenConnectPath">Binary path</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="customOpenConnectPath"
+                  placeholder="/usr/local/bin/openconnect-okta"
+                  value={customPath}
+                  onChange={(e) => {
+                    setCustomPath(e.target.value);
+                    setPathError('');
+                  }}
+                  className="font-mono text-sm"
+                />
+                <Button variant="outline" onClick={enableCustomBinary} disabled={saving}>
+                  Enable…
+                </Button>
+              </div>
+              {pathError && <p className="text-sm text-destructive" role="alert">{pathError}</p>}
+            </div>
+          )}
+        </div>
+
         {saving && (
           <p className="text-xs text-muted-foreground">Saving...</p>
         )}
@@ -93,6 +209,14 @@ function SettingsPanel({ settings, onSettingsChange, showAlert, addLog }) {
           </p>
         )}
       </CardContent>
+
+      {pendingPath && (
+        <CustomBinaryWarning
+          path={pendingPath}
+          onConfirm={confirmCustomBinary}
+          onCancel={() => setPendingPath(null)}
+        />
+      )}
     </Card>
   );
 }

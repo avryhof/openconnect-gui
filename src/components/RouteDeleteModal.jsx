@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AlertTriangle, ShieldAlert } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -9,6 +9,19 @@ function RouteDeleteModal({ route, onConfirm, onCancel }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setPassword('');
+        setError('');
+        onCancel();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onCancel]);
 
   if (!route) return null;
 
@@ -44,13 +57,18 @@ function RouteDeleteModal({ route, onConfirm, onCancel }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <Card className="w-full max-w-md p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+      <Card
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="route-modal-title"
+        className="w-full max-w-md p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200"
+      >
         <div className="flex items-start gap-3">
           <div className="rounded-full bg-destructive/10 p-2">
-            <AlertTriangle className="h-6 w-6 text-destructive" />
+            <AlertTriangle className="h-6 w-6 text-destructive" aria-hidden="true" />
           </div>
           <div className="flex-1">
-            <h2 className="text-lg font-semibold">Delete Route</h2>
+            <h2 id="route-modal-title" className="text-lg font-semibold">Delete Route</h2>
             <p className="text-sm text-muted-foreground mt-1">
               This will delete the following route from your system
             </p>
@@ -71,7 +89,7 @@ function RouteDeleteModal({ route, onConfirm, onCancel }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+              <ShieldAlert className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               <Label htmlFor="sudo-password">Administrator Password</Label>
             </div>
             <Input
@@ -84,10 +102,11 @@ function RouteDeleteModal({ route, onConfirm, onCancel }) {
                 setError('');
               }}
               autoFocus
+              aria-invalid={!!error}
               className={error ? 'border-destructive' : ''}
             />
             {error && (
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-sm text-destructive" role="alert">{error}</p>
             )}
             <p className="text-xs text-muted-foreground">
               Administrator privileges are required to modify network routes

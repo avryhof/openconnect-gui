@@ -16,9 +16,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveProfiles: (profiles) => ipcRenderer.invoke('save-profiles', profiles),
   loadProfiles: () => ipcRenderer.invoke('load-profiles'),
 
-  // App settings (tray behavior, autostart)
+  // App settings (tray behavior, autostart, theme)
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
+
+  // Advanced: validate a custom OpenConnect binary path
+  validateOpenConnectPath: (candidatePath) => ipcRenderer.invoke('validate-openconnect-path', candidatePath),
 
   // Process management
   checkRunningProcesses: () => ipcRenderer.invoke('check-running-processes'),

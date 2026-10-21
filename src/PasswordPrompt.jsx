@@ -32,6 +32,17 @@ function PasswordPrompt() {
     bridge.send('password-prompt-result', null);
   };
 
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        bridge.send('password-prompt-result', null);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [bridge]);
+
   const handleKeyPress = (e) => {
     if (e.key === 'Enter') {
       handleSubmit(e);

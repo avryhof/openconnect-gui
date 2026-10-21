@@ -99,7 +99,7 @@ function Splash() {
             <Shield className="h-12 w-12" />
           </div>
           <h1 className="text-4xl font-bold">OpenConnect VPN</h1>
-          <Badge variant="outline">Version 1.2.0</Badge>
+          <Badge variant="outline">Version 1.3.1</Badge>
         </div>
 
         <Separator />

@@ -229,6 +229,7 @@ function ConnectionForm({
               variant="outline"
               size="icon"
               title="Delete Profile"
+              aria-label="Delete profile"
               disabled={!selectedProfile || selectedProfile === '__new__'}
               onClick={handleDeleteProfile}
             >

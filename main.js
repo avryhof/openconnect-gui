@@ -1,21 +1,10 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, dialog, shell, Notification, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, dialog, shell, Notification, safeStorage, nativeTheme } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
 const isMac = process.platform === 'darwin';
 const isLinux = process.platform === 'linux';
-
-// Some Linux GPU/driver combinations and headless or remote sessions cannot start
-// Chromium's GPU process, which crashes the app on launch. Fall back to software
-// rendering there; this UI does not need hardware acceleration.
-if (isLinux) {
-  app.disableHardwareAcceleration();
-  app.commandLine.appendSwitch('disable-gpu');
-  app.commandLine.appendSwitch('disable-gpu-compositing');
-  app.commandLine.appendSwitch('disable-gpu-sandbox');
-  app.commandLine.appendSwitch('in-process-gpu');
-}
 
 let mainWindow;
 let splashWindow;
@@ -31,7 +20,10 @@ const DEFAULT_SETTINGS = {
   minimizeToTray: true,
   startHiddenToTray: false,
   startWithSystem: false,
-  trayNoticeShown: false
+  trayNoticeShown: false,
+  theme: 'system',
+  allowCustomOpenConnect: false,
+  customOpenConnectPath: ''
 };
 const startInBackground = process.argv.includes('--background');
 let appSettings = loadSettingsSync();
@@ -41,6 +33,12 @@ let autoConnectAttempted = false;
 function loadSettingsSync() {
   try {
     if (fs.existsSync(SETTINGS_FILE)) {
+      // Older versions wrote this file world-readable; tighten it in place.
+      try {
+        fs.chmodSync(SETTINGS_FILE, 0o600);
+      } catch (error) {
+        // Best effort — some filesystems ignore chmod
+      }
       return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
     }
   } catch (error) {
@@ -51,12 +49,25 @@ function loadSettingsSync() {
 
 function saveSettingsSync(settings) {
   try {
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), { mode: 0o600 });
+    try {
+      fs.chmodSync(SETTINGS_FILE, 0o600);
+    } catch (error) {
+      // Best effort — some filesystems ignore chmod
+    }
     return true;
   } catch (error) {
     console.log(`Failed to save settings: ${error.message}`);
     return false;
   }
+}
+
+// Electron maps nativeTheme.themeSource onto prefers-color-scheme in every
+// renderer, so a single setting flips all four windows at once. 'system'
+// follows the OS, 'light'/'dark' force one. Invalid values fall back to system.
+function applyTheme(settings) {
+  const source = settings && settings.theme;
+  nativeTheme.themeSource = (source === 'light' || source === 'dark') ? source : 'system';
 }
 
 function getAutostartCommand() {
@@ -233,6 +244,24 @@ function showTrayNoticeOnce() {
   }
 }
 
+// Lock a window down: no new windows, and navigation is limited to the app's
+// own pages (the Vite dev server in development, file:// bundles in production).
+// Anything else — a remote origin, a data: URL, a redirect — is blocked.
+function hardenWindow(win) {
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+  const allowedPrefixes = isDev
+    ? ['http://localhost:5173/']
+    : ['file://'];
+
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!allowedPrefixes.some((prefix) => url.startsWith(prefix))) {
+      event.preventDefault();
+    }
+  });
+}
+
 // Create splash window
 function createSplashWindow() {
   splashWindow = new BrowserWindow({
@@ -256,6 +285,7 @@ function createSplashWindow() {
     splashWindow.loadFile(path.join(__dirname, 'dist', 'pages', 'splash.html'));
   }
 
+  hardenWindow(splashWindow);
   splashWindow.center();
 
   // Handle splash window events
@@ -434,6 +464,8 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, 'dist', 'pages', 'index.html'));
   }
 
+  hardenWindow(mainWindow);
+
   // Prevent window close/minimize, hide to tray instead (configurable)
   mainWindow.on('close', (event) => {
     if (app.isQuitting || !appSettings.minimizeToTray) {
@@ -484,6 +516,8 @@ function createInstallerWindow() {
     installerWindow.loadFile(path.join(__dirname, 'dist', 'pages', 'installer-helper.html'));
   }
 
+  hardenWindow(installerWindow);
+
   installerWindow.on('closed', () => {
     installerWindow = null;
   });
@@ -491,17 +525,59 @@ function createInstallerWindow() {
 
 // This function is no longer needed - checks are done in splash screen
 
+// Directories from which a binary may be executed as root. OpenConnect and
+// the vpnc-script run under sudo, so a user-writable path (e.g. under $HOME)
+// would be a privilege-escalation hole: anything that can drop a file there
+// gets root. Only system-managed locations are trusted.
+const TRUSTED_SYSTEM_DIRS = [
+  '/usr/bin',
+  '/usr/sbin',
+  '/usr/local/bin',
+  '/usr/local/sbin',
+  '/opt/homebrew/bin',
+  '/snap/bin'
+];
+
+// The vpnc-script is a helper invoked as root too, but it lives under share/
+// or etc/ rather than bin/. Accept its known system locations.
+const TRUSTED_SCRIPT_DIRS = [
+  '/usr/share/vpnc-scripts',
+  '/usr/libexec/vpnc-scripts',
+  '/etc/vpnc',
+  '/opt/homebrew/etc/vpnc',
+  '/usr/local/etc/vpnc',
+  '/opt/homebrew/opt/vpnc-scripts/etc/vpnc',
+  '/usr/local/opt/vpnc-scripts/etc/vpnc'
+];
+
+function isTrustedSystemPath(binaryPath, extraDirs = []) {
+  if (typeof binaryPath !== 'string' || !binaryPath) {
+    return false;
+  }
+  const resolved = path.resolve(binaryPath);
+  const dirs = TRUSTED_SYSTEM_DIRS.concat(extraDirs);
+  return dirs.some((dir) => resolved === path.join(dir, path.basename(resolved)));
+}
+
+// A user-supplied custom binary is only honored when BOTH opt-ins are on:
+// the advanced setting is enabled AND a non-empty path is set. Anything else
+// falls back to the trusted system binary.
+function customOpenConnectAllowed(settings) {
+  const s = settings || appSettings;
+  return !!(s && s.allowCustomOpenConnect && typeof s.customOpenConnectPath === 'string' && s.customOpenConnectPath.trim());
+}
+
 // Helper function to check OpenConnect
 function checkOpenConnect() {
   return new Promise((resolve) => {
-    // Check for OpenConnect in multiple locations
+    // Trusted system locations, checked first.
     const locations = [
       '/usr/local/bin/openconnect',           // Homebrew (Intel Mac) / Linux local
       '/opt/homebrew/bin/openconnect',        // Homebrew (Apple Silicon)
       '/usr/sbin/openconnect',                // Linux (Debian/Ubuntu)
       '/usr/bin/openconnect',                 // Linux
       '/usr/local/sbin/openconnect',          // Linux local
-      path.join(process.env.HOME, '.local/openconnect/bin/openconnect'), // Standalone install
+      '/snap/bin/openconnect',                // Linux (snap)
       path.join(__dirname, 'bin', 'openconnect'), // Bundled with app (dev)
       path.join(process.resourcesPath, 'bin', 'openconnect'), // Bundled with app (production)
     ];
@@ -509,7 +585,16 @@ function checkOpenConnect() {
     // Check each location
     for (const location of locations) {
       if (fs.existsSync(location)) {
-        resolve({ installed: true, path: location });
+        resolve({ installed: true, path: location, custom: false });
+        return;
+      }
+    }
+
+    // Opt-in custom binary (advanced setting + warning acknowledgement).
+    if (customOpenConnectAllowed()) {
+      const customPath = appSettings.customOpenConnectPath.trim();
+      if (fs.existsSync(customPath)) {
+        resolve({ installed: true, path: customPath, custom: true });
         return;
       }
     }
@@ -518,12 +603,28 @@ function checkOpenConnect() {
     const checkProcess = spawn('which', ['openconnect']);
     checkProcess.on('close', (code) => {
       if (code === 0) {
-        resolve({ installed: true, path: 'openconnect' });
+        resolve({ installed: true, path: 'openconnect', custom: false });
       } else {
         resolve({ installed: false });
       }
     });
   });
+}
+
+// Resolve a bare command name to a trusted absolute path when possible. If it
+// cannot be resolved to a trusted directory, keep the bare name so sudo's own
+// secure_path applies; the connect flow refuses anything writable regardless.
+function resolveTrustedBinary(name) {
+  if (name !== 'openconnect') {
+    return name;
+  }
+  for (const dir of TRUSTED_SYSTEM_DIRS) {
+    const candidate = path.join(dir, name);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return name;
 }
 
 // Check if expect is installed
@@ -581,7 +682,7 @@ function checkSudoAccess() {
 function getOpenConnectPath() {
   return new Promise((resolve) => {
     checkOpenConnect().then(result => {
-      resolve(result.path || 'openconnect');
+      resolve(resolveTrustedBinary(result.path || 'openconnect'));
     });
   });
 }
@@ -596,7 +697,6 @@ function getVpncScriptPath() {
     '/usr/share/vpnc-scripts/vpnc-script',          // Debian/Ubuntu (vpnc-scripts)
     '/usr/libexec/vpnc-scripts/vpnc-script',        // Linux alternate
     '/etc/vpnc/vpnc-script',                        // Linux (vpnc package)
-    path.join(process.env.HOME, '.local/openconnect/etc/vpnc/vpnc-script'), // Standalone
   ];
 
   // Check each location
@@ -720,6 +820,19 @@ async function connectVPN(config) {
     // Get OpenConnect binary path
     const openconnectPath = await getOpenConnectPath();
 
+    // The connection runs as root. Refuse anything that is neither a trusted
+    // system binary nor an explicitly opt-in custom path, so a writable path
+    // can never be executed with elevated privileges by accident.
+    if (openconnectPath !== 'openconnect' && !isTrustedSystemPath(openconnectPath) && !customOpenConnectAllowed()) {
+      sendLog('[ERROR] Refusing to run OpenConnect from an untrusted, user-writable path: ' + openconnectPath, 'error');
+      updateStatus('disconnected');
+      return { success: false, error: 'OpenConnect binary is in an untrusted location. Install it system-wide, or enable the advanced custom-binary option and acknowledge the warning.' };
+    }
+
+    if (openconnectPath !== 'openconnect' && !isTrustedSystemPath(openconnectPath)) {
+      sendLog('[WARNING] Using a custom OpenConnect binary that will run as root: ' + openconnectPath, 'error');
+    }
+
     // Get vpnc-script path (optional)
     const vpncScriptPath = getVpncScriptPath();
 
@@ -728,6 +841,11 @@ async function connectVPN(config) {
 
     // Only add vpnc-script if found (to match working manual command)
     if (vpncScriptPath && vpncScriptPath !== 'vpnc-script') {
+      if (!isTrustedSystemPath(vpncScriptPath, TRUSTED_SCRIPT_DIRS)) {
+        sendLog('[ERROR] Refusing to run an untrusted vpnc-script as root: ' + vpncScriptPath, 'error');
+        updateStatus('disconnected');
+        return { success: false, error: 'The vpnc-script is in an untrusted location. Install vpnc-scripts system-wide.' };
+      }
       args.push('-s', vpncScriptPath);
     }
 
@@ -978,6 +1096,29 @@ ipcMain.handle('check-openconnect', async () => {
   return checkOpenConnect();
 });
 
+// Validate a user-supplied custom OpenConnect binary path before the advanced
+// setting can be enabled. Returns whether the file exists and exec bits, and
+// flags paths that sit in a user-writable location.
+ipcMain.handle('validate-openconnect-path', async (event, candidatePath) => {
+  if (typeof candidatePath !== 'string' || !candidatePath.trim()) {
+    return { valid: false, reason: 'empty' };
+  }
+  const resolved = path.resolve(candidatePath.trim());
+  if (!path.isAbsolute(resolved)) {
+    return { valid: false, reason: 'not-absolute' };
+  }
+  try {
+    const stats = fs.statSync(resolved);
+    if (!stats.isFile()) {
+      return { valid: false, reason: 'not-a-file' };
+    }
+    fs.accessSync(resolved, fs.constants.X_OK);
+  } catch (error) {
+    return { valid: false, reason: 'missing-or-not-executable' };
+  }
+  return { valid: true, path: resolved, trusted: isTrustedSystemPath(resolved) };
+});
+
 // App settings
 ipcMain.handle('get-settings', async () => {
   return {
@@ -989,6 +1130,10 @@ ipcMain.handle('get-settings', async () => {
 
 ipcMain.handle('save-settings', async (event, partial) => {
   appSettings = { ...appSettings, ...partial };
+
+  if (Object.prototype.hasOwnProperty.call(partial, 'theme')) {
+    applyTheme(appSettings);
+  }
 
   if (isLinux && typeof partial.startWithSystem === 'boolean') {
     if (!applyAutostart(partial.startWithSystem)) {
@@ -1585,7 +1730,15 @@ function promptForPassword({ title, description, label, placeholder, hint } = {}
       }
       resolve(password || null);
     };
-    const onResult = (event, password) => finish(password);
+    // Only the live prompt window may answer. Without this check any other
+    // renderer (e.g. the main window) could race the real prompt and feed a
+    // spoofed password into the connect/kill/route flow.
+    const onResult = (event, password) => {
+      if (promptWindow.isDestroyed() || event.sender !== promptWindow.webContents) {
+        return;
+      }
+      finish(password);
+    };
 
     ipcMain.on('password-prompt-result', onResult);
     promptWindow.on('closed', () => finish(null));
@@ -1604,6 +1757,8 @@ function promptForPassword({ title, description, label, placeholder, hint } = {}
     } else {
       promptWindow.loadFile(path.join(__dirname, 'dist', 'pages', 'password-prompt.html'), { query });
     }
+
+    hardenWindow(promptWindow);
 
     promptWindow.once('ready-to-show', () => {
       if (!promptWindow.isDestroyed()) {
@@ -1649,6 +1804,7 @@ function promptForVpnPassword(config) {
 
 // App lifecycle
 app.whenReady().then(() => {
+  applyTheme(appSettings);
   migrateStoredPasswords();
 
   if (startInBackground) {

@@ -11,15 +11,20 @@ function Alert({ alert, hideAlert }) {
     : 'bg-secondary text-secondary-foreground';
 
   return (
-    <div className={`fixed bottom-6 right-6 flex items-center gap-2 rounded-md px-4 py-3 shadow-lg ${bgColor}`}>
+    <div
+      className={`fixed bottom-6 right-6 flex items-center gap-2 rounded-md px-4 py-3 shadow-lg ${bgColor}`}
+      role="status"
+      aria-live="polite"
+    >
       <span className="text-sm">{alert.message}</span>
       <Button
         variant="ghost"
         size="icon"
         className="h-6 w-6"
         onClick={hideAlert}
+        aria-label="Dismiss message"
       >
-        <X className="h-4 w-4" />
+        <X className="h-4 w-4" aria-hidden="true" />
       </Button>
     </div>
   );

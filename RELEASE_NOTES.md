@@ -1,5 +1,48 @@
 # Release notes
 
+## OpenConnect VPN GUI v1.3.1
+
+Bug fix.
+
+### Fixes
+
+- Restored the public IP address lookup, which the new Content Security Policy in v1.3.0 was blocking. `connect-src` on the main window now allows `api.ipify.org`.
+
+---
+
+## OpenConnect VPN GUI v1.3.0
+
+Dark mode, accessibility improvements, and a hardening pass on privileged execution.
+
+### Highlights
+
+**Themes**
+- Light and dark themes, with a setting to follow your desktop's appearance
+- The theme applies to every window (main, splash, installer, password prompt) and changes live when the system appearance changes
+
+**Accessibility (WCAG 2.2 AA)**
+- The main navigation is a proper tab list: arrow keys, Home/End, and correct roles and states
+- Dialogs (kill process, delete route, custom-binary warning) are keyboard-complete: Escape closes them, focus moves in on open, and every control is reachable
+- Icon-only buttons have accessible names; status messages are announced to screen readers
+- Colors come from theme tokens with light/dark values tuned for contrast
+
+**Security**
+- Privileged execution is restricted to trusted system directories. OpenConnect and the vpnc-script are refused if they resolve to a user-writable location
+- Custom OpenConnect builds (for example one patched for Okta) require a deliberate double opt-in: the advanced setting plus a warning dialog with a confirmation checkbox
+- Every window now denies new windows and restricts navigation to the app's own pages
+- Every page carries a restrictive Content Security Policy
+- The password-prompt result channel is sender-validated, so another window cannot spoof a password
+- `settings.json` is written with `0600` permissions
+- The Linux GPU workaround flags were removed, restoring Chromium's GPU sandbox
+
+### Requirements
+
+- **Linux**: Ubuntu/Debian or a derivative, with `sudo apt install openconnect vpnc-scripts expect`
+- **macOS**: `brew install openconnect`, Apple Silicon build
+- A desktop keyring (GNOME Keyring or KWallet) on Linux for encrypted password storage
+
+---
+
 ## OpenConnect VPN GUI v1.2.0
 
 Linux support, a persistent background mode, and four security fixes.
